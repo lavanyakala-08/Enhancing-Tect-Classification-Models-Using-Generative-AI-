@@ -1,0 +1,43 @@
+import torch
+from model import BertClassifierModel, get_tokenizer
+from preprocessing import clean_text
+import os
+
+class Predictor:
+    def __init__(self, weight_path="bert_classifier.pt"):
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.tokenizer = get_tokenizer()
+        self.model = BertClassifierModel(num_classes=2)
+        
+        if os.path.exists(weight_path):
+            self.model.load_state_dict(torch.load(weight_path, map_location=self.device))
+        self.model.to(self.device)
+        self.model.eval()
+        self.classes = {0: "Negative Feedback / Error Risk", 1: "Positive Engagement"}
+
+    def run_inference(self, text):
+        cleaned = clean_text(text)
+        inputs = self.tokenizer(
+            cleaned,
+            max_length=64,
+            padding="max_length",
+            truncation=True,
+            return_tensors="pt"
+        ).to(self.device)
+
+        with torch.no_grad():
+            outputs = self.model(inputs['input_ids'], inputs['attention_mask'])
+            prediction = torch.argmax(outputs, dim=1).item()
+            
+        return {
+            "raw_text": text,
+            "normalized_text": cleaned,
+            "prediction_id": prediction,
+            "label": self.classes[prediction]
+        }
+
+if __name__ == "__main__":
+    # Fallback verification wrapper execution loop
+    predictor = Predictor()
+    sample = "I absolutely hate this faulty application."
+    print(predictor.run_inference(sample))
